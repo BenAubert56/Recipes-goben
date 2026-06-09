@@ -74,6 +74,22 @@ export default function PlanningPage() {
     }
   };
 
+  const copyMidiToSoir = async (date: Date) => {
+    const midiMeals = slotMeals(date, "midi");
+    if (!midiMeals.length) return;
+    try {
+      await Promise.all(
+        midiMeals.map(m =>
+          api.addMeal({ date: fmt(date), meal_type: "soir", recipe_id: m.recipe_id, portions: m.portions })
+        )
+      );
+      toast("Repas copié sur le soir !");
+      load();
+    } catch {
+      toast("Erreur lors de la copie", "error");
+    }
+  };
+
   const removeMeal = async (id: number) => {
     if (!confirm("Retirer ce repas ?")) return;
     try {
@@ -102,24 +118,40 @@ export default function PlanningPage() {
 
       {loading ? <div className="spinner" /> : days.map((day, i) => (
         <div key={i} className="day-block">
-          <div className="day-header">{DAY_NAMES[i]} {day.getDate()}</div>
-          {DAYS.map((type) => (
-            <div key={type} className="meal-slot">
-              <div className="slot-label">{type === "midi" ? "☀️ Midi" : "🌙 Soir"}</div>
-              {slotMeals(day, type).map((m) => (
-                <div key={m.id} className="meal-chip">
-                  <div>
-                    <div className="meal-chip-name">{m.recipe_name}</div>
-                    <div className="meal-chip-portions">{m.portions} portion{m.portions > 1 ? "s" : ""}</div>
+          <div className="day-header">
+          <span className="day-header-dot" />
+          {DAY_NAMES[i]}
+          <span className="day-header-num">{day.getDate()}</span>
+        </div>
+          {DAYS.map((type) => {
+            const showCopy = type === "soir"
+              && slotMeals(day, "midi").length > 0
+              && slotMeals(day, "soir").length === 0;
+            return (
+              <div key={type} className="meal-slot">
+                <div className="slot-label">{type === "midi" ? "☀️ Midi" : "🌙 Soir"}</div>
+                {slotMeals(day, type).map((m) => (
+                  <div key={m.id} className="meal-chip">
+                    <div>
+                      <div className="meal-chip-name">{m.recipe_name}</div>
+                      <div className="meal-chip-portions">{m.portions} portion{m.portions > 1 ? "s" : ""}</div>
+                    </div>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeMeal(m.id)}>✕</button>
                   </div>
-                  <button className="btn btn-danger btn-sm" onClick={() => removeMeal(m.id)}>✕</button>
+                ))}
+                <div className="slot-actions">
+                  {showCopy && (
+                    <button className="btn btn-copy btn-sm" onClick={() => copyMidiToSoir(day)}>
+                      ⇊ Copier le midi
+                    </button>
+                  )}
+                  <button className="btn btn-secondary btn-sm" onClick={() => openModal(day, type)}>
+                    + Ajouter
+                  </button>
                 </div>
-              ))}
-              <button className="btn btn-secondary btn-sm" style={{ marginTop: 4 }} onClick={() => openModal(day, type)}>
-                + Ajouter
-              </button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       ))}
 
