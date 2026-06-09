@@ -71,7 +71,7 @@ export default function RecipeDetailPage() {
         api.setSteps(rid, validSteps),
       ]);
       toast("Recette enregistrée !");
-      if (isNew) navigate(`/recipe/${rid}`, { replace: true });
+      if (isNew) navigate("/", { replace: true });
       else { setEditing(false); load(); }
     } catch {
       toast("Erreur lors de l'enregistrement", "error");

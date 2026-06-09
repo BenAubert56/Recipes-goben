@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api, MealPlan, Recipe } from "../services/api";
 import { useToast } from "../components/Toast";
 
@@ -22,6 +22,7 @@ export default function PlanningPage() {
   const [selDate,     setSelDate]     = useState("");
   const [selType,     setSelType]     = useState<"midi" | "soir">("midi");
   const [selPortions, setSelPortions] = useState(2);
+  const [search,      setSearch]      = useState("");
   const toast = useToast();
 
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -54,8 +55,14 @@ export default function PlanningPage() {
     setSelDate(fmt(date));
     setSelType(type);
     setSelPortions(2);
+    setSearch("");
     setModal(true);
   };
+
+  const filteredRecipes = useMemo(
+    () => recipes.filter(r => r.name.toLowerCase().includes(search.toLowerCase())),
+    [recipes, search]
+  );
 
   const addMeal = async (recipe: Recipe) => {
     setModal(false);
@@ -118,28 +125,67 @@ export default function PlanningPage() {
 
       {modal && (
         <div className="overlay" onClick={(e) => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal-sheet">
-            <div className="modal-handle" />
-            <div className="flex justify-between items-center" style={{ marginBottom: 16 }}>
-              <h2 style={{ fontWeight: 700, fontSize: 18 }}>Choisir une recette</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setModal(false)}>✕</button>
-            </div>
-            <div className="portions-row">
-              <span style={{ fontWeight: 600 }}>Portions :</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setSelPortions(p => Math.max(1, p - 1))}>−</button>
-              <span style={{ fontSize: 20, fontWeight: 700, minWidth: 28, textAlign: "center" }}>{selPortions}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setSelPortions(p => p + 1)}>+</button>
-            </div>
-            {recipes.length === 0 ? (
-              <p className="text-muted">Aucune recette. Crée-en une d'abord.</p>
-            ) : (
-              recipes.map((r) => (
-                <div key={r.id} className="card recipe-pick-item" onClick={() => addMeal(r)}>
-                  <span style={{ fontWeight: 600 }}>{r.name}</span>
-                  <span className="text-muted">›</span>
+          <div className="modal-sheet modal-sheet-tall">
+            {/* Header fixe */}
+            <div className="modal-header">
+              <div className="modal-handle" />
+              <div className="flex justify-between items-center" style={{ marginBottom: 12 }}>
+                <h2 style={{ fontWeight: 700, fontSize: 18 }}>
+                  Ajouter un repas
+                </h2>
+                <button className="btn btn-secondary btn-sm" onClick={() => setModal(false)}>✕</button>
+              </div>
+
+              <div className="portions-row">
+                <span style={{ fontWeight: 600, flex: 1 }}>Portions</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setSelPortions(p => Math.max(1, p - 1))}>−</button>
+                <span style={{ fontSize: 20, fontWeight: 700, minWidth: 32, textAlign: "center" }}>{selPortions}</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setSelPortions(p => p + 1)}>+</button>
+              </div>
+
+              {recipes.length > 4 && (
+                <div style={{ position: "relative", marginTop: 10 }}>
+                  <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Rechercher une recette…"
+                    style={{ paddingLeft: 38 }}
+                    autoFocus
+                  />
                 </div>
-              ))
-            )}
+              )}
+            </div>
+
+            {/* Liste scrollable */}
+            <div className="modal-recipe-list">
+              {recipes.length === 0 ? (
+                <p className="text-muted" style={{ textAlign: "center", padding: "40px 0" }}>
+                  Aucune recette. Crée-en une d'abord.
+                </p>
+              ) : filteredRecipes.length === 0 ? (
+                <p className="text-muted" style={{ textAlign: "center", padding: "40px 0" }}>
+                  Aucune recette ne correspond.
+                </p>
+              ) : (
+                filteredRecipes.map((r, idx) => (
+                  <div
+                    key={r.id}
+                    className="recipe-pick-item"
+                    style={{ animationDelay: `${idx * 0.04}s` }}
+                    onClick={() => addMeal(r)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}</div>
+                      {r.description && (
+                        <div className="text-muted" style={{ fontSize: 13, marginTop: 2 }}>{r.description}</div>
+                      )}
+                    </div>
+                    <span style={{ color: "#e07b39", fontSize: 18, fontWeight: 700 }}>›</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
