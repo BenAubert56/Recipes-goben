@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { api, MealPlan, Recipe } from "../services/api";
 import { useToast } from "../components/Toast";
 
@@ -158,7 +159,7 @@ export default function PlanningPage() {
         </div>
       ))}
 
-      {modal && (
+      {modal && createPortal(
         <div className="overlay" onClick={(e) => e.target === e.currentTarget && setModal(false)}>
           <div className="modal-sheet modal-sheet-tall">
             {/* Header fixe */}
@@ -222,7 +223,8 @@ export default function PlanningPage() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

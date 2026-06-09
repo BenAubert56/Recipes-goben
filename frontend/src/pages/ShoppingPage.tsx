@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, ShoppingItem } from "../services/api";
 import { useToast } from "../components/Toast";
 
@@ -134,7 +135,7 @@ export default function ShoppingPage() {
       )}
 
       {/* Copy modal — fallback for HTTP contexts */}
-      {copyModal && (
+      {copyModal && createPortal(
         <div className="overlay" onClick={(e) => e.target === e.currentTarget && setCopyModal(false)}>
           <div className="modal-sheet">
             <div className="modal-handle" />
@@ -156,7 +157,8 @@ export default function ShoppingPage() {
               Copier
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
