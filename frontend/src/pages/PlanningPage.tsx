@@ -47,6 +47,15 @@ export default function PlanningPage() {
     }
   };
 
+  // Rechargement silencieux des repas (sans spinner → conserve le scroll)
+  const refreshMeals = async () => {
+    try {
+      setMeals(await api.getMealPlans(from, to));
+    } catch {
+      toast("Erreur de rafraîchissement", "error");
+    }
+  };
+
   useEffect(() => { load(); }, [from]);
 
   const slotMeals = (date: Date, type: "midi" | "soir") =>
@@ -69,7 +78,7 @@ export default function PlanningPage() {
     setModal(false);
     try {
       await api.addMeal({ date: selDate, meal_type: selType, recipe_id: recipe.id, portions: selPortions });
-      load();
+      refreshMeals();
     } catch {
       toast("Erreur lors de l'ajout", "error");
     }
@@ -85,7 +94,7 @@ export default function PlanningPage() {
         )
       );
       toast("Repas copié sur le soir !");
-      load();
+      refreshMeals();
     } catch {
       toast("Erreur lors de la copie", "error");
     }
