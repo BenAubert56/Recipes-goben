@@ -91,11 +91,14 @@ export default function PlanningPage() {
   };
 
   const removeMeal = async (id: number) => {
-    if (!confirm("Retirer ce repas ?")) return;
+    // Optimistic: on retire tout de suite de l'UI
+    const prev = meals;
+    setMeals(m => m.filter(x => x.id !== id));
     try {
       await api.deleteMeal(id);
-      load();
+      toast("Repas retiré");
     } catch {
+      setMeals(prev); // rollback si erreur
       toast("Erreur lors de la suppression", "error");
     }
   };
