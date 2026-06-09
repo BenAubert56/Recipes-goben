@@ -6,7 +6,8 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # Runner ARM64 natif → build natif pour le Raspberry Pi, sans émulation QEMU
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +25,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/recipe-shop-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -34,7 +35,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/recipe-shop-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
