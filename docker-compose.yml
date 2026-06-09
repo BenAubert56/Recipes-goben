@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: recipe_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: recipe
+      POSTGRES_PASSWORD: recipe_secret
+      POSTGRES_DB: recipe_shop
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  api:
+    build: ./backend
+    container_name: recipe_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://recipe:recipe_secret@db:5432/recipe_shop
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    container_name: recipe_frontend
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
