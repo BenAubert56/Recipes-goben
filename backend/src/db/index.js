@@ -12,6 +12,8 @@ async function migrate() {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS image_url TEXT;
+
     CREATE TABLE IF NOT EXISTS ingredients (
       id   SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE
@@ -28,16 +30,29 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS meal_plans (
       id         SERIAL PRIMARY KEY,
       date       DATE NOT NULL,
-      meal_type  TEXT NOT NULL CHECK (meal_type IN ('midi','soir')),
+      meal_type  TEXT NOT NULL,
       recipe_id  INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
       portions   INTEGER NOT NULL DEFAULT 2
     );
+
+    ALTER TABLE meal_plans DROP CONSTRAINT IF EXISTS meal_plans_meal_type_check;
+    ALTER TABLE meal_plans ADD CONSTRAINT meal_plans_meal_type_check
+      CHECK (meal_type IN ('matin','midi','soir'));
 
     CREATE TABLE IF NOT EXISTS recipe_steps (
       id          SERIAL PRIMARY KEY,
       recipe_id   INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
       step_number INTEGER NOT NULL,
       instruction TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shopping_extras (
+      id         SERIAL PRIMARY KEY,
+      week_start DATE NOT NULL,
+      name       TEXT NOT NULL,
+      quantity   NUMERIC,
+      unit       TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 }

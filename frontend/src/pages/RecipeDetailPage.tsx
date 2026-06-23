@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, Recipe } from "../services/api";
 import { useToast } from "../components/Toast";
+import { fileToDataUrl } from "../services/image";
 import IngredientInput from "../components/IngredientInput";
 
 const UNITS = ["g", "kg", "ml", "L", "pièce", "c. à s.", "c. à c.", "pincée"];
@@ -26,8 +27,11 @@ export default function RecipeDetailPage() {
   const [name,     setName]     = useState("");
   const [desc,     setDesc]     = useState("");
   const [servings, setServings] = useState("2");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [ings,     setIngs]     = useState<IngRow[]>([emptyIng()]);
   const [steps,    setSteps]    = useState<StepRow[]>([emptyStep()]);
+
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     if (isNew) return;
@@ -37,6 +41,7 @@ export default function RecipeDetailPage() {
       setName(r.name);
       setDesc(r.description || "");
       setServings(String(r.servings));
+      setImageUrl(r.image_url || null);
       setIngs(r.ingredients?.length ? r.ingredients.map(i => ({ name: i.name, quantity: String(i.quantity), unit: i.unit })) : [emptyIng()]);
       setSteps(r.steps?.length ? r.steps.map(s => ({ instruction: s.instruction })) : [emptyStep()]);
     } catch {
@@ -57,7 +62,12 @@ export default function RecipeDetailPage() {
     try {
       const validIngs  = ings.filter(i => i.name.trim() && i.quantity);
       const validSteps = steps.filter(s => s.instruction.trim());
-      const payload    = { name: name.trim(), description: desc.trim() || undefined, servings: parseInt(servings) || 2 };
+      const payload    = {
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        servings: parseInt(servings) || 2,
+        image_url: imageUrl ?? undefined,
+      };
       let rid: number;
       if (isNew) {
         const r = await api.createRecipe(payload);
@@ -86,6 +96,16 @@ export default function RecipeDetailPage() {
   const updStep = (i: number, v: string) =>
     setSteps(p => p.map((s, j) => j === i ? { instruction: v } : s));
 
+  const handlePhotoFile = async (file: File | null | undefined) => {
+    if (!file) return;
+    try {
+      const url = await fileToDataUrl(file, 1200, 0.82);
+      setImageUrl(url);
+    } catch (e: any) {
+      toast(e?.message || "Erreur photo", "error");
+    }
+  };
+
   if (loading) return <div className="spinner" />;
 
   /* ── View mode ── */
@@ -96,6 +116,21 @@ export default function RecipeDetailPage() {
           <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>← Retour</button>
           <button className="btn btn-primary btn-sm" onClick={() => setEditing(true)}>✏️ Modifier</button>
         </div>
+
+        {recipe.image_url && (
+          <img
+            src={recipe.image_url}
+            alt={recipe.name}
+            style={{
+              width: "100%",
+              maxHeight: 260,
+              objectFit: "cover",
+              borderRadius: 16,
+              marginBottom: 12,
+              display: "block",
+            }}
+          />
+        )}
 
         <div className="card">
           <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{recipe.name}</h1>
@@ -147,7 +182,38 @@ export default function RecipeDetailPage() {
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="card">
-        <label>Nom *</label>
+        <label>Photo (optionnel)</label>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={(e) => handlePhotoFile(e.target.files?.[0])}
+        />
+        {imageUrl ? (
+          <div style={{ position: "relative", marginBottom: 10 }}>
+            <img
+              src={imageUrl}
+              alt="aperçu"
+              style={{ width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 12, display: "block" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => photoInputRef.current?.click()}>
+                Changer
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => setImageUrl(null)}>
+                Retirer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn btn-secondary btn-sm" onClick={() => photoInputRef.current?.click()}>
+            📷 Ajouter une photo
+          </button>
+        )}
+
+        <label style={{ marginTop: 14 }}>Nom *</label>
         <input value={name} onChange={(e) => { setName(e.target.value); setError(""); }} placeholder="Ex: Pâtes bolognaise" />
         <label>Description</label>
         <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description courte…" />

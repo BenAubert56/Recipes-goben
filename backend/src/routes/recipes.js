@@ -32,21 +32,26 @@ router.get("/:id", async (req, res) => {
 
 // Create recipe
 router.post("/", async (req, res) => {
-  const { name, description, servings = 2 } = req.body;
+  const { name, description, servings = 2, image_url } = req.body;
   if (!name) return res.status(400).json({ error: "name required" });
   const { rows } = await pool.query(
-    "INSERT INTO recipes (name, description, servings) VALUES ($1,$2,$3) RETURNING *",
-    [name, description, servings]
+    "INSERT INTO recipes (name, description, servings, image_url) VALUES ($1,$2,$3,$4) RETURNING *",
+    [name, description, servings, image_url || null]
   );
   res.status(201).json(rows[0]);
 });
 
 // Update recipe
 router.put("/:id", async (req, res) => {
-  const { name, description, servings } = req.body;
+  const { name, description, servings, image_url } = req.body;
   const { rows } = await pool.query(
-    "UPDATE recipes SET name=COALESCE($1,name), description=COALESCE($2,description), servings=COALESCE($3,servings) WHERE id=$4 RETURNING *",
-    [name, description, servings, req.params.id]
+    `UPDATE recipes SET
+       name=COALESCE($1,name),
+       description=COALESCE($2,description),
+       servings=COALESCE($3,servings),
+       image_url=COALESCE($4,image_url)
+     WHERE id=$5 RETURNING *`,
+    [name, description, servings, image_url, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: "Not found" });
   res.json(rows[0]);

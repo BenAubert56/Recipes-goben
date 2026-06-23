@@ -83,12 +83,21 @@ export default function RecipesPage() {
             className="recipe-card"
             style={{ animationDelay: `${idx * 0.05}s` }}
           >
-            <div
-              className="recipe-avatar"
-              style={{ background: avatarGradient(r.name) }}
-            >
-              {r.name.charAt(0).toUpperCase()}
-            </div>
+            {r.image_url ? (
+              <img
+                src={r.image_url}
+                alt=""
+                className="recipe-avatar"
+                style={{ objectFit: "cover" }}
+              />
+            ) : (
+              <div
+                className="recipe-avatar"
+                style={{ background: avatarGradient(r.name) }}
+              >
+                {r.name.charAt(0).toUpperCase()}
+              </div>
+            )}
 
             <div className="recipe-card-body">
               <div className="recipe-card-name">{r.name}</div>

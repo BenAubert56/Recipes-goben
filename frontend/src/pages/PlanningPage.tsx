@@ -11,7 +11,13 @@ function getMonday(d: Date) {
   return date;
 }
 const fmt  = (d: Date) => d.toISOString().split("T")[0];
-const DAYS: Array<"midi" | "soir"> = ["midi", "soir"];
+type MealType = "matin" | "midi" | "soir";
+const DAYS: MealType[] = ["matin", "midi", "soir"];
+const SLOT_LABEL: Record<MealType, string> = {
+  matin: "🥐 Matin",
+  midi:  "☀️ Midi",
+  soir:  "🌙 Soir",
+};
 const DAY_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 export default function PlanningPage() {
@@ -21,7 +27,7 @@ export default function PlanningPage() {
   const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(false);
   const [selDate,     setSelDate]     = useState("");
-  const [selType,     setSelType]     = useState<"midi" | "soir">("midi");
+  const [selType,     setSelType]     = useState<MealType>("midi");
   const [selPortions, setSelPortions] = useState(2);
   const [search,      setSearch]      = useState("");
   const toast = useToast();
@@ -58,10 +64,10 @@ export default function PlanningPage() {
 
   useEffect(() => { load(); }, [from]);
 
-  const slotMeals = (date: Date, type: "midi" | "soir") =>
+  const slotMeals = (date: Date, type: MealType) =>
     meals.filter(m => m.date.startsWith(fmt(date)) && m.meal_type === type);
 
-  const openModal = (date: Date, type: "midi" | "soir") => {
+  const openModal = (date: Date, type: MealType) => {
     setSelDate(fmt(date));
     setSelType(type);
     setSelPortions(2);
@@ -140,10 +146,11 @@ export default function PlanningPage() {
             const showCopy = type === "soir"
               && slotMeals(day, "midi").length > 0
               && slotMeals(day, "soir").length === 0;
+            const meals = slotMeals(day, type);
             return (
               <div key={type} className="meal-slot">
-                <div className="slot-label">{type === "midi" ? "☀️ Midi" : "🌙 Soir"}</div>
-                {slotMeals(day, type).map((m) => (
+                <div className="slot-label">{SLOT_LABEL[type]}</div>
+                {meals.map((m) => (
                   <div key={m.id} className="meal-chip">
                     <div>
                       <div className="meal-chip-name">{m.recipe_name}</div>
@@ -159,7 +166,7 @@ export default function PlanningPage() {
                     </button>
                   )}
                   <button className="btn btn-secondary btn-sm" onClick={() => openModal(day, type)}>
-                    + Ajouter
+                    + {meals.length ? "Ajouter une recette" : "Ajouter"}
                   </button>
                 </div>
               </div>
