@@ -24,12 +24,23 @@ router.get("/", async (req, res) => {
     [from, to]
   );
 
-  const items = rows.map((r) => ({
-    ingredient: r.ingredient,
-    quantity: Math.ceil(parseFloat(r.total_quantity) * 10) / 10,
-    unit: r.unit,
-    extra: false,
-  }));
+  const { rows: overrides } = await pool.query(
+    `SELECT ingredient, unit, quantity FROM shopping_overrides WHERE week_start BETWEEN $1 AND $2`,
+    [from, to]
+  );
+  const overrideMap = new Map(overrides.map((o) => [`${o.ingredient}|${o.unit}`, parseFloat(o.quantity)]));
+
+  const items = rows.map((r) => {
+    const key = `${r.ingredient}|${r.unit}`;
+    const overridden = overrideMap.has(key);
+    return {
+      ingredient: r.ingredient,
+      quantity: overridden ? overrideMap.get(key) : Math.ceil(parseFloat(r.total_quantity) * 10) / 10,
+      unit: r.unit,
+      extra: false,
+      overridden,
+    };
+  });
 
   const { rows: extras } = await pool.query(
     `SELECT id, name AS ingredient, quantity, unit
@@ -52,6 +63,33 @@ router.get("/", async (req, res) => {
   res.json(items);
 });
 
+// Set (or replace) a manual override for an auto-computed item's quantity
+router.put("/override", async (req, res) => {
+  const { week_start, ingredient, unit, quantity } = req.body;
+  if (!week_start || !ingredient || quantity == null) {
+    return res.status(400).json({ error: "week_start, ingredient and quantity required" });
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO shopping_overrides (week_start, ingredient, unit, quantity)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (week_start, ingredient, unit) DO UPDATE SET quantity=EXCLUDED.quantity
+     RETURNING *`,
+    [week_start, ingredient, unit || "", quantity]
+  );
+  res.status(200).json(rows[0]);
+});
+
+// Remove a manual override — the item reverts to its auto-computed quantity
+router.delete("/override", async (req, res) => {
+  const { week_start, ingredient, unit } = req.query;
+  if (!week_start || !ingredient) return res.status(400).json({ error: "week_start and ingredient required" });
+  await pool.query(
+    "DELETE FROM shopping_overrides WHERE week_start=$1 AND ingredient=$2 AND unit=$3",
+    [week_start, ingredient, unit || ""]
+  );
+  res.status(204).end();
+});
+
 // Add custom item (lessive, etc.)
 router.post("/extras", async (req, res) => {
   const { week_start, name, quantity, unit } = req.body;
@@ -62,6 +100,21 @@ router.post("/extras", async (req, res) => {
     [week_start, name.trim(), quantity ?? null, unit ?? null]
   );
   res.status(201).json(rows[0]);
+});
+
+// Edit custom item (name, quantity or unit)
+router.put("/extras/:id", async (req, res) => {
+  const { name, quantity, unit } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE shopping_extras SET
+       name=COALESCE($1,name),
+       quantity=$2,
+       unit=$3
+     WHERE id=$4 RETURNING *`,
+    [name?.trim(), quantity ?? null, unit ?? null, req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Not found" });
+  res.json(rows[0]);
 });
 
 // Delete custom item

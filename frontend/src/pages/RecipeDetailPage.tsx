@@ -66,7 +66,7 @@ export default function RecipeDetailPage() {
         name: name.trim(),
         description: desc.trim() || undefined,
         servings: parseInt(servings) || 2,
-        image_url: imageUrl ?? undefined,
+        image_url: imageUrl,
       };
       let rid: number;
       if (isNew) {
@@ -189,7 +189,7 @@ export default function RecipeDetailPage() {
           accept="image/*"
           capture="environment"
           style={{ display: "none" }}
-          onChange={(e) => handlePhotoFile(e.target.files?.[0])}
+          onChange={(e) => { handlePhotoFile(e.target.files?.[0]); e.target.value = ""; }}
         />
         {imageUrl ? (
           <div style={{ position: "relative", marginBottom: 10 }}>
