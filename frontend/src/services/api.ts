@@ -44,6 +44,7 @@ export type ShoppingItem = {
   quantity: number | null;
   unit: string;
   extra: boolean;
+  overridden?: boolean;
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -97,6 +98,16 @@ export const api = {
     request<ShoppingItem[]>(`/shopping?from=${from}&to=${to}`),
   addShoppingExtra: (data: { week_start: string; name: string; quantity?: number | null; unit?: string | null }) =>
     request<{ id: number }>("/shopping/extras", { method: "POST", body: JSON.stringify(data) }),
+  updateShoppingExtra: (id: number, data: { name?: string; quantity?: number | null; unit?: string | null }) =>
+    request<void>(`/shopping/extras/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteShoppingExtra: (id: number) =>
     request<void>(`/shopping/extras/${id}`, { method: "DELETE" }),
+
+  setShoppingOverride: (data: { week_start: string; ingredient: string; unit: string; quantity: number }) =>
+    request<void>("/shopping/override", { method: "PUT", body: JSON.stringify(data) }),
+  clearShoppingOverride: (data: { week_start: string; ingredient: string; unit: string }) =>
+    request<void>(
+      `/shopping/override?week_start=${encodeURIComponent(data.week_start)}&ingredient=${encodeURIComponent(data.ingredient)}&unit=${encodeURIComponent(data.unit)}`,
+      { method: "DELETE" }
+    ),
 };

@@ -1,7 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, Recipe } from "../services/api";
 import { useToast } from "../components/Toast";
+
+type SortKey = "name" | "recent" | "servings";
+const SORT_LABEL: Record<SortKey, string> = {
+  name: "Nom (A → Z)",
+  recent: "Plus récentes",
+  servings: "Portions",
+};
 
 const AVATAR_GRADIENTS = [
   ["#C55A2B", "#E8722A"],
@@ -21,6 +28,8 @@ export default function RecipesPage() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
+  const [search,  setSearch]  = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -37,6 +46,21 @@ export default function RecipesPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const visibleRecipes = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? recipes.filter(r =>
+          r.name.toLowerCase().includes(q) ||
+          (r.description?.toLowerCase().includes(q) ?? false)
+        )
+      : recipes;
+    const sorted = [...filtered];
+    if (sortKey === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    else if (sortKey === "recent") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    else if (sortKey === "servings") sorted.sort((a, b) => a.servings - b.servings);
+    return sorted;
+  }, [recipes, search, sortKey]);
 
   const del = async (e: React.MouseEvent, id: number, name: string) => {
     e.preventDefault();
@@ -66,6 +90,25 @@ export default function RecipesPage() {
 
       {error && <div className="alert alert-error">⚠ {error}</div>}
 
+      {recipes.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Rechercher une recette…"
+              style={{ paddingLeft: 38 }}
+            />
+          </div>
+          <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} style={{ width: "auto" }}>
+            {(Object.keys(SORT_LABEL) as SortKey[]).map(k => (
+              <option key={k} value={k}>{SORT_LABEL[k]}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? <div className="spinner" /> : recipes.length === 0 ? (
         <div className="empty-state">
           <span className="empty-icon">🍳</span>
@@ -75,8 +118,13 @@ export default function RecipesPage() {
             Créer une recette
           </button>
         </div>
+      ) : visibleRecipes.length === 0 ? (
+        <div className="empty-state">
+          <span className="empty-icon">🔍</span>
+          <p>Aucune recette ne correspond à "{search}".</p>
+        </div>
       ) : (
-        recipes.map((r, idx) => (
+        visibleRecipes.map((r, idx) => (
           <Link
             key={r.id}
             to={`/recipe/${r.id}`}

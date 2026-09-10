@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const { normalizeForMatch, isSameIngredient } = require("../lib/ingredientMatch");
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -54,7 +55,58 @@ async function migrate() {
       unit       TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Per-week manual override of an auto-computed shopping list quantity
+    -- (e.g. "j'en ai déjà 2 à la maison, n'affiche que 1"). Deleting the row
+    -- reverts the item to the auto-computed quantity.
+    CREATE TABLE IF NOT EXISTS shopping_overrides (
+      week_start DATE NOT NULL,
+      ingredient TEXT NOT NULL,
+      unit       TEXT NOT NULL DEFAULT '',
+      quantity   NUMERIC NOT NULL,
+      PRIMARY KEY (week_start, ingredient, unit)
+    );
   `);
+
+  await mergeDuplicateIngredients();
+}
+
+// Ingredient names that were typed with slightly different spellings
+// (e.g. "oeuf" vs "oeufs") end up as separate rows, causing duplicate lines
+// on the shopping list. This repoints recipe_ingredients from any duplicate
+// onto the oldest (lowest id) match and drops the duplicate row. Idempotent:
+// once merged there is nothing left to merge on the next startup.
+async function mergeDuplicateIngredients() {
+  const { rows } = await pool.query("SELECT id, name FROM ingredients ORDER BY id");
+  const groups = [];
+  for (const ing of rows) {
+    const key = normalizeForMatch(ing.name);
+    const group = groups.find((g) => isSameIngredient(key, g.key));
+    if (group) group.members.push(ing.id);
+    else groups.push({ key, members: [ing.id] });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const group of groups) {
+      if (group.members.length < 2) continue;
+      const [canonicalId, ...dupIds] = group.members;
+      for (const dupId of dupIds) {
+        await client.query(
+          "UPDATE recipe_ingredients SET ingredient_id=$1 WHERE ingredient_id=$2",
+          [canonicalId, dupId]
+        );
+        await client.query("DELETE FROM ingredients WHERE id=$1", [dupId]);
+      }
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = { pool, migrate };

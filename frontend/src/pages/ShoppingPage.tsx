@@ -31,6 +31,22 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 const UNITS = ["", "g", "kg", "ml", "L", "pièce", "paquet", "rouleau"];
 
+// Checked items are persisted per week in localStorage: nothing server-side
+// tracks them, so without this the list came back fully unchecked on every
+// revisit (leaving the week, coming back, reloading…).
+const checkedStorageKey = (weekStart: string) => `courses-cochees-${weekStart}`;
+
+function loadChecked(weekStart: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(checkedStorageKey(weekStart));
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveChecked(weekStart: string, checked: Set<string>) {
+  try { localStorage.setItem(checkedStorageKey(weekStart), JSON.stringify([...checked])); } catch {}
+}
+
 export default function ShoppingPage() {
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   const [items,     setItems]     = useState<ShoppingItem[]>([]);
@@ -42,16 +58,21 @@ export default function ShoppingPage() {
   const [newName,   setNewName]   = useState("");
   const [newQty,    setNewQty]    = useState("");
   const [newUnit,   setNewUnit]   = useState("");
+  const [editItem,  setEditItem]  = useState<ShoppingItem | null>(null);
+  const [editName,  setEditName]  = useState("");
+  const [editQty,   setEditQty]   = useState("");
+  const [editUnit,  setEditUnit]  = useState("");
   const toast = useToast();
 
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekKey = fmt(weekStart);
 
   const load = async () => {
     try {
       setLoading(true);
-      setChecked(new Set());
-      setItems(await api.getShopping(fmt(weekStart), fmt(weekEnd)));
+      setChecked(loadChecked(weekKey));
+      setItems(await api.getShopping(weekKey, fmt(weekEnd)));
     } catch {
       toast("Impossible de charger la liste", "error");
     } finally {
@@ -61,19 +82,70 @@ export default function ShoppingPage() {
 
   const refresh = async () => {
     try {
-      setItems(await api.getShopping(fmt(weekStart), fmt(weekEnd)));
+      setItems(await api.getShopping(weekKey, fmt(weekEnd)));
     } catch {
       toast("Erreur de rafraîchissement", "error");
     }
   };
 
-  useEffect(() => { load(); }, [fmt(weekStart)]);
+  useEffect(() => { load(); }, [weekKey]);
 
   const itemKey = (it: ShoppingItem) =>
     it.extra && it.id != null ? `extra-${it.id}` : `${it.ingredient}|${it.unit}`;
 
   const toggle = (key: string) =>
-    setChecked(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+    setChecked(prev => {
+      const n = new Set(prev);
+      n.has(key) ? n.delete(key) : n.add(key);
+      saveChecked(weekKey, n);
+      return n;
+    });
+
+  const openEdit = (item: ShoppingItem) => {
+    setEditItem(item);
+    setEditName(item.ingredient);
+    setEditQty(item.quantity != null ? String(item.quantity) : "");
+    setEditUnit(item.unit || "");
+  };
+
+  const saveEdit = async () => {
+    if (!editItem) return;
+    try {
+      if (editItem.extra && editItem.id != null) {
+        if (!editName.trim()) { toast("Nom requis", "error"); return; }
+        await api.updateShoppingExtra(editItem.id, {
+          name: editName.trim(),
+          quantity: editQty ? parseFloat(editQty) : null,
+          unit: editUnit || null,
+        });
+      } else {
+        if (!editQty) { toast("Quantité requise", "error"); return; }
+        await api.setShoppingOverride({
+          week_start: weekKey,
+          ingredient: editItem.ingredient,
+          unit: editItem.unit,
+          quantity: parseFloat(editQty),
+        });
+      }
+      setEditItem(null);
+      refresh();
+      toast("Quantité mise à jour");
+    } catch {
+      toast("Erreur lors de la modification", "error");
+    }
+  };
+
+  const resetOverride = async () => {
+    if (!editItem) return;
+    try {
+      await api.clearShoppingOverride({ week_start: weekKey, ingredient: editItem.ingredient, unit: editItem.unit });
+      setEditItem(null);
+      refresh();
+      toast("Quantité réinitialisée");
+    } catch {
+      toast("Erreur lors de la réinitialisation", "error");
+    }
+  };
 
   const changeWeek = (delta: number) => {
     const d = new Date(weekStart);
@@ -168,10 +240,16 @@ export default function ShoppingPage() {
                   <span className="item-name" style={{ flex: 1, fontSize: 16, minWidth: 0 }}>
                     {item.ingredient}
                     {item.extra && <span style={{ marginLeft: 6, fontSize: 11, color: "#e07b39" }}>★</span>}
+                    {item.overridden && <span style={{ marginLeft: 6, fontSize: 11, color: "#888" }} title="Quantité modifiée manuellement">✎</span>}
                   </span>
                   <span className="item-qty" style={{ fontSize: 15, color: "#888", whiteSpace: "nowrap", marginLeft: 8 }}>
                     {item.quantity != null ? `${fmtQty(item.quantity)} ${item.unit}` : ""}
                   </span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginLeft: 8, padding: "4px 8px" }}
+                    onClick={(e) => { e.stopPropagation(); openEdit(item); }}
+                  >✎</button>
                   {item.extra && item.id != null && (
                     <button
                       className="btn btn-danger btn-sm"
@@ -224,6 +302,53 @@ export default function ShoppingPage() {
             <button className="btn btn-primary btn-full" style={{ marginTop: 16 }} onClick={addExtra}>
               Ajouter
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {editItem && createPortal(
+        <div className="overlay" onClick={(e) => e.target === e.currentTarget && setEditItem(null)}>
+          <div className="modal-sheet">
+            <div className="modal-handle" />
+            <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+              <h2 style={{ fontWeight: 700, fontSize: 18 }}>Modifier la quantité</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditItem(null)}>✕</button>
+            </div>
+            {editItem.extra ? (
+              <>
+                <label>Nom *</label>
+                <input value={editName} onChange={e => setEditName(e.target.value)} autoFocus />
+              </>
+            ) : (
+              <p className="text-muted" style={{ marginBottom: 4 }}>{editItem.ingredient}</p>
+            )}
+            <div className="ing-row" style={{ marginTop: 10 }}>
+              <input
+                type="number"
+                value={editQty}
+                onChange={e => setEditQty(e.target.value)}
+                placeholder="Qté"
+                min={0}
+                autoFocus={!editItem.extra}
+              />
+              <select value={editUnit} onChange={e => setEditUnit(e.target.value)} disabled={!editItem.extra}>
+                {UNITS.map(u => <option key={u} value={u}>{u || "—"}</option>)}
+              </select>
+            </div>
+            {!editItem.extra && (
+              <p className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Utile si tu en as déjà à la maison : la quantité à acheter sera ajustée pour cette semaine uniquement.
+              </p>
+            )}
+            <button className="btn btn-primary btn-full" style={{ marginTop: 16 }} onClick={saveEdit}>
+              Enregistrer
+            </button>
+            {!editItem.extra && editItem.overridden && (
+              <button className="btn btn-secondary btn-full" style={{ marginTop: 8 }} onClick={resetOverride}>
+                Réinitialiser (revenir au calcul automatique)
+              </button>
+            )}
           </div>
         </div>,
         document.body
